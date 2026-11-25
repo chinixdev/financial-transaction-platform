@@ -16,6 +16,7 @@ services:
   backend:
     build: ./backend
     environment:
+      SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:postgresql://postgres:5432/fincore
       DB_USER: fincore
       DB_PASSWORD: fincore_dev

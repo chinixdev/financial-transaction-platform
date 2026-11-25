@@ -15,12 +15,21 @@ type Props = {
   transfers: Transfer[];
   accounts: Account[];
   onRefresh: () => void;
+  onRefund: (t: Transfer) => void;
 };
+
+function label(t: Transfer, out: boolean) {
+  if (t.type === "REFUND")
+    return out ? "Reembolso enviado" : "Reembolso recibido";
+  if (t.type === "TOPUP") return "Recarga de saldo";
+  return out ? "Transferencia enviada" : "Transferencia recibida";
+}
 
 export default function MovementsTable({
   transfers,
   accounts,
   onRefresh,
+  onRefund,
 }: Props) {
   const [search, setSearch] = useState("");
   const myIds = new Set(accounts.map((a) => a.id));
@@ -60,6 +69,7 @@ export default function MovementsTable({
               <th>FECHA</th>
               <th>ESTADO</th>
               <th className="right">IMPORTE</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -77,11 +87,7 @@ export default function MovementsTable({
                         )}
                       </div>
                       <div>
-                        <strong>
-                          {out
-                            ? "Transferencia enviada"
-                            : "Transferencia recibida"}
-                        </strong>
+                        <strong>{label(t, out)}</strong>
                         <small>#{t.id.slice(0, 8).toUpperCase()}</small>
                       </div>
                     </div>
@@ -94,10 +100,22 @@ export default function MovementsTable({
                     </span>
                   </td>
                   <td
-                    className={"right amount " + (out ? "negative" : "positive")}
+                    className={
+                      "right amount " + (out ? "negative" : "positive")
+                    }
                   >
                     {out ? "−" : "+"}
                     {money(t.amount)}
+                  </td>
+                  <td>
+                    {/* Solo se puede reembolsar una transferencia recibida y aún no devuelta del todo */}
+                    {!out &&
+                      t.type === "TRANSFER" &&
+                      t.status !== "REFUNDED" && (
+                        <button className="outline" onClick={() => onRefund(t)}>
+                          Reembolsar
+                        </button>
+                      )}
                   </td>
                 </tr>
               );

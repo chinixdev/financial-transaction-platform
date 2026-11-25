@@ -1,9 +1,27 @@
+# Credenciales y configuración privada (nunca se suben)
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+application-local.yml
+application-secrets.yml
+
+# Generados
 node_modules/
 dist/
 target/
+*.tsbuildinfo
+coverage/
+.vercel/
+*.log
+*.h2.db
+*.mv.db
+*.trace.db
+hs_err_pid*
+
+# Editor y sistema
 .idea/
 .vscode/
-*.log
 .DS_Store
+Thumbs.db

@@ -12,6 +12,11 @@ export default function AuthScreen({ onAuth }: { onAuth: (a: Auth) => void }) {
   const [password, setPassword] = useState(DEMO ? DEMO_PASSWORD : "");
   const { busy, error, setError, run } = useSubmit();
 
+  // Acceso directo del Demo Mode: entra sin escribir credenciales.
+  function enterDemo() {
+    void run(async () => onAuth(await api.login(DEMO_EMAIL, DEMO_PASSWORD)));
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     void run(async () => {
@@ -95,6 +100,16 @@ export default function AuthScreen({ onAuth }: { onAuth: (a: Auth) => void }) {
                 : "Acceder a mi cuenta"}
             <ArrowRight size={17} />
           </button>
+          {DEMO && (
+            <button
+              type="button"
+              className="outline demo-access"
+              disabled={busy}
+              onClick={enterDemo}
+            >
+              Entrar como usuario demo
+            </button>
+          )}
 
           <div className="auth-switch">
             {register ? "¿Ya tienes una cuenta?" : "¿Aún no tienes una cuenta?"}{" "}

@@ -1,8 +1,11 @@
 server:
   port: 8080
 spring:
+  # "local" = H2 en memoria + datos demo. Con SPRING_PROFILES_ACTIVE=prod usa PostgreSQL (DB_URL).
+  profiles:
+    default: local
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/fincore}
+    url: ${DB_URL:jdbc:h2:mem:fincore;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE}
     username: ${DB_USER:fincore}
     password: ${DB_PASSWORD:fincore_dev}
   jpa:
@@ -11,11 +14,66 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false # Redis solo se usa para rate limiting, no como repositorio
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        default-requeue-rejected: false # tras los reintentos, el mensaje va a la DLQ
+        retry:
+          enabled: true
+          max-attempts: 3
+logging:
+  # El id de cada petición (RequestIdFilter) aparece en todos los logs.
+  pattern:
+    level: "%5p [%X{requestId:-}]"
 app:
   jwt-secret: ${JWT_SECRET:local-dev-only-change-this-secret-32bytes-minimum}
   cors-origin: ${CORS_ORIGIN:http://localhost:5173}
+  outbox:
+    delay-ms: 2000
+  # Antifraude: umbrales de las reglas (ver FraudProperties).
+  fraud:
+    max-amount: 5000
+    max-per-window: 5
+    window-minutes: 10
+    drain-ratio: 0.90
+    block-score: 70
+  # Pasarela: sin STRIPE_SECRET_KEY se usa el proveedor simulado. Solo claves de PRUEBA (sk_test_...).
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_local_dev_only}
+    currency: usd
+  # Resiliencia de la pasarela (Resilience4j).
+  resilience:
+    retry-attempts: 3
+    retry-wait-ms: 200
+    circuit-wait-seconds: 30
+  # Límites por IP y minuto.
+  rate-limit:
+    auth-per-minute: 10
+    money-per-minute: 60
+  # Infraestructura opcional: desactivada por defecto para poder ejecutar sin Docker.
+  redis:
+    enabled: ${REDIS_ENABLED:false} # true = rate limiting compartido en Redis
+  rabbitmq:
+    enabled: ${RABBITMQ_ENABLED:false} # true = eventos por RabbitMQ (con cola de errores)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
+  health:
+    # Redis y RabbitMQ son opcionales: que no estén no debe marcar la app como caída.
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false
