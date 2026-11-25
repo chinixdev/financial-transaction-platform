@@ -12,6 +12,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.*;
 
@@ -42,7 +44,10 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain security(HttpSecurity http) throws Exception {
+  SecurityFilterChain security(
+    HttpSecurity http,
+    JwtAuthenticationConverter jwtConverter
+  ) throws Exception {
     return http
       .csrf(c -> c.disable())
       .cors(c -> {})
@@ -53,15 +58,38 @@ public class SecurityConfig {
         a
           .requestMatchers("/api/auth/**", "/actuator/health")
           .permitAll()
+          // El proveedor de pagos no tiene JWT: este endpoint se protege con la firma del mensaje.
+          .requestMatchers(HttpMethod.POST, "/api/webhooks/stripe")
+          .permitAll()
+          // Operación y conciliación: solo administradores (claim "role" del JWT).
+          .requestMatchers("/api/reconciliation/**", "/api/system/**")
+          .hasRole("ADMIN")
           .anyRequest()
           .authenticated()
       )
-      .oauth2ResourceServer(o -> o.jwt(j -> {}))
+      .oauth2ResourceServer(o ->
+        o.jwt(j -> j.jwtAuthenticationConverter(jwtConverter))
+      )
       .build();
   }
 
+  /** Convierte el claim "role" del JWT en la autoridad ROLE_ADMIN / ROLE_USER. */
   @Bean
-  CorsConfigurationSource cors(@Value("${app.cors-origin}") String origin) {
+  JwtAuthenticationConverter jwtConverter() {
+    JwtGrantedAuthoritiesConverter roles = new JwtGrantedAuthoritiesConverter();
+    roles.setAuthoritiesClaimName("role");
+    roles.setAuthorityPrefix("ROLE_");
+    JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+    converter.setJwtGrantedAuthoritiesConverter(roles);
+    return converter;
+  }
+
+  @Bean
+  // El nombre "corsConfigurationSource" es obligatorio: Spring Security solo reconoce el bean con ese
+  // nombre. Con otro nombre el CORS se ignora en silencio y el navegador bloquea al frontend.
+  CorsConfigurationSource corsConfigurationSource(
+    @Value("${app.cors-origin}") String origin
+  ) {
     CorsConfiguration c = new CorsConfiguration();
     c.setAllowedOrigins(List.of(origin));
     c.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));

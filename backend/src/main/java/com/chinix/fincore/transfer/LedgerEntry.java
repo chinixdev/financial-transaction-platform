@@ -2,8 +2,10 @@ package com.chinix.fincore.transfer;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
+/** Un asiento del libro contable. Cada transferencia crea un DEBIT y un CREDIT por el mismo importe. */
 @Entity
 @Table(name = "ledger_entries")
 public class LedgerEntry {
@@ -19,6 +21,9 @@ public class LedgerEntry {
 
   public String direction;
   public BigDecimal amount;
+
+  @Column(name = "created_at", insertable = false, updatable = false)
+  public Instant createdAt;
 
   protected LedgerEntry() {}
 

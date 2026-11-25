@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowUpRight,
+  Activity,
   Bell,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   CircleHelp,
@@ -10,31 +11,54 @@ import {
   LogOut,
   Menu,
   Plus,
+  Scale,
   Send,
+  ShieldAlert,
   ShieldCheck,
   TrendingUp,
   Wallet,
+  Webhook,
 } from "lucide-react";
-import { api, type Account, type Auth, type Transfer } from "./api/client";
+import {
+  api,
+  DEMO,
+  type Account,
+  type Auth,
+  type Transfer,
+} from "./api/client";
 import AccountsPanel from "./components/AccountsPanel";
 import ActivityChart from "./components/ActivityChart";
 import AuthScreen from "./components/AuthScreen";
+import DemoBanner from "./components/DemoBanner";
+import LedgerPanel from "./components/LedgerPanel";
+import NotificationsPanel from "./components/NotificationsPanel";
+import PaymentsPanel from "./components/PaymentsPanel";
+import ReconciliationPanel from "./components/ReconciliationPanel";
+import SystemPanel from "./components/SystemPanel";
+import RiskPanel from "./components/RiskPanel";
+import WebhooksPanel from "./components/WebhooksPanel";
 import MovementsTable from "./components/MovementsTable";
+import RefundModal from "./components/RefundModal";
 import TransferModal from "./components/TransferModal";
 import { Brand, StatCard } from "./components/ui";
 import { money } from "./utils";
 
 const MENU = [
   { name: "Resumen", icon: LayoutDashboard },
-  { name: "Mis cuentas", icon: Wallet },
-  { name: "Transferencias", icon: ArrowUpRight },
-  { name: "Seguridad", icon: ShieldCheck },
+  { name: "Pagos", icon: CreditCard },
+  { name: "Riesgo y fraude", icon: ShieldAlert },
+  { name: "Ledger", icon: BookOpen },
+  { name: "Webhooks", icon: Webhook },
+  { name: "Notificaciones", icon: Bell },
+  { name: "Conciliación", icon: Scale, admin: true },
+  { name: "Estado del sistema", icon: Activity, admin: true },
 ];
 
 const pad = (n: number) => n.toString().padStart(2, "0");
 
 export default function App() {
   const [token, setToken] = useState(sessionStorage.getItem("fc_token"));
+  const [role, setRole] = useState(sessionStorage.getItem("fc_role") || "USER");
   const [name, setName] = useState(
     sessionStorage.getItem("fc_name") || "Usuario",
   );
@@ -43,6 +67,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [view, setView] = useState("Resumen");
   const [modal, setModal] = useState(false);
+  const [refunding, setRefunding] = useState<Transfer | null>(null);
+  const [version, setVersion] = useState(0); // sube tras cada operación para recargar el ledger
   const [menuOpen, setMenuOpen] = useState(false);
 
   async function refresh() {
@@ -50,6 +76,7 @@ export default function App() {
       const [a, t] = await Promise.all([api.accounts(), api.transfers()]);
       setAccounts(a);
       setTransfers(t);
+      setVersion((v) => v + 1);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -63,6 +90,8 @@ export default function App() {
   function login(a: Auth) {
     sessionStorage.setItem("fc_token", a.token);
     sessionStorage.setItem("fc_name", a.name);
+    sessionStorage.setItem("fc_role", a.role);
+    setRole(a.role);
     setName(a.name);
     setToken(a.token);
   }
@@ -74,7 +103,13 @@ export default function App() {
     setTransfers([]);
   }
 
-  if (!token) return <AuthScreen onAuth={login} />;
+  if (!token)
+    return (
+      <>
+        <AuthScreen onAuth={login} />
+        {DEMO && <DemoBanner />}
+      </>
+    );
 
   const total = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
   const active = accounts.filter((a) => a.status === "ACTIVE").length;
@@ -82,24 +117,27 @@ export default function App() {
 
   return (
     <div className="shell">
+      {DEMO && <DemoBanner />}
       <aside className={"sidebar " + (menuOpen ? "opened" : "")}>
         <Brand />
         <div className="side-label">WORKSPACE</div>
         <nav>
-          {MENU.map((item) => (
-            <button
-              key={item.name}
-              className={"nav " + (view === item.name ? "active" : "")}
-              onClick={() => {
-                setView(item.name);
-                setMenuOpen(false);
-              }}
-            >
-              <item.icon size={18} />
-              {item.name}
-              {view === item.name && <span className="nav-dot" />}
-            </button>
-          ))}
+          {MENU.filter((item) => !item.admin || role === "ADMIN").map(
+            (item) => (
+              <button
+                key={item.name}
+                className={"nav " + (view === item.name ? "active" : "")}
+                onClick={() => {
+                  setView(item.name);
+                  setMenuOpen(false);
+                }}
+              >
+                <item.icon size={18} />
+                {item.name}
+                {view === item.name && <span className="nav-dot" />}
+              </button>
+            ),
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="secure">
@@ -129,7 +167,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             <span className="env">
-              <span /> DEMO ENVIRONMENT
+              <span /> {DEMO ? "DEMO ENVIRONMENT" : "API LOCAL"}
             </span>
             <button className="icon-btn" title="Notificaciones">
               <Bell size={19} />
@@ -168,56 +206,79 @@ export default function App() {
             </div>
           )}
 
-          <div className="stats">
-            <StatCard
-              featured
-              label="Balance total"
-              value={money(total)}
-              icon={<Wallet size={20} />}
-              note={
-                <>
-                  <span className="chip">PEN</span> Saldo disponible
-                </>
-              }
+          {view === "Pagos" ? (
+            <PaymentsPanel
+              accounts={accounts}
+              refreshKey={version}
+              onChanged={() => void refresh()}
             />
-            <StatCard
-              label="Cuentas activas"
-              value={pad(active)}
-              icon={<CreditCard size={20} />}
-              note={
-                <>
-                  <span className="mini-green">
-                    <CheckCircle2 size={13} /> Activas
-                  </span>{" "}
-                  Cuentas personales
-                </>
-              }
-            />
-            <StatCard
-              label="Transferencias"
-              value={pad(transfers.length)}
-              icon={<Send size={20} />}
-              note={
-                <>
-                  <span className="mini-green">
-                    <TrendingUp size={13} /> Registradas
-                  </span>{" "}
-                  Últimos movimientos
-                </>
-              }
-            />
-          </div>
+          ) : view === "Riesgo y fraude" ? (
+            <RiskPanel refreshKey={version} />
+          ) : view === "Ledger" ? (
+            <LedgerPanel refreshKey={version} />
+          ) : view === "Webhooks" ? (
+            <WebhooksPanel refreshKey={version} />
+          ) : view === "Notificaciones" ? (
+            <NotificationsPanel refreshKey={version} />
+          ) : view === "Conciliación" ? (
+            <ReconciliationPanel refreshKey={version} />
+          ) : view === "Estado del sistema" ? (
+            <SystemPanel refreshKey={version} />
+          ) : (
+            <>
+              <div className="stats">
+                <StatCard
+                  featured
+                  label="Balance total"
+                  value={money(total)}
+                  icon={<Wallet size={20} />}
+                  note={
+                    <>
+                      <span className="chip">PEN</span> Saldo disponible
+                    </>
+                  }
+                />
+                <StatCard
+                  label="Cuentas activas"
+                  value={pad(active)}
+                  icon={<CreditCard size={20} />}
+                  note={
+                    <>
+                      <span className="mini-green">
+                        <CheckCircle2 size={13} /> Activas
+                      </span>{" "}
+                      Cuentas personales
+                    </>
+                  }
+                />
+                <StatCard
+                  label="Transferencias"
+                  value={pad(transfers.length)}
+                  icon={<Send size={20} />}
+                  note={
+                    <>
+                      <span className="mini-green">
+                        <TrendingUp size={13} /> Registradas
+                      </span>{" "}
+                      Últimos movimientos
+                    </>
+                  }
+                />
+              </div>
 
-          <div className="columns">
-            <ActivityChart />
-            <AccountsPanel accounts={accounts} />
-          </div>
+              <div className="columns">
+                <ActivityChart />
+                <AccountsPanel accounts={accounts} />
+              </div>
 
-          <MovementsTable
-            transfers={transfers}
-            accounts={accounts}
-            onRefresh={() => void refresh()}
-          />
+              <MovementsTable
+                transfers={transfers}
+                accounts={accounts}
+                onRefresh={() => void refresh()}
+                onRefund={setRefunding}
+              />
+            </>
+          )}
 
           <footer>
             © 2026 FinCore · Proyecto de ingeniería financiera{" "}
@@ -229,6 +290,16 @@ export default function App() {
         </main>
       </div>
 
+      {refunding && (
+        <RefundModal
+          transfer={refunding}
+          onClose={() => setRefunding(null)}
+          onDone={() => {
+            setRefunding(null);
+            void refresh();
+          }}
+        />
+      )}
       {modal && (
         <TransferModal
           accounts={accounts}

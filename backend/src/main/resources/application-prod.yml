@@ -1,0 +1,5 @@
+# Perfil "prod": logs en JSON (formato ECS), listos para Elastic, Loki o CloudWatch.
+logging:
+  structured:
+    format:
+      console: ecs

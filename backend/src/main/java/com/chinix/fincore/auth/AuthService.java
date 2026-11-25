@@ -31,7 +31,12 @@ public class AuthService {
     this.jwt = jwt;
   }
 
-  public record AuthResponse(String token, String name, String email) {}
+  public record AuthResponse(
+    String token,
+    String name,
+    String email,
+    String role
+  ) {}
 
   @Transactional
   public AuthResponse register(String email, String password, String name) {
@@ -91,7 +96,7 @@ public class AuthService {
         )
       )
       .getTokenValue();
-    return new AuthResponse(token, u.fullName, u.email);
+    return new AuthResponse(token, u.fullName, u.email, u.role);
   }
 
   public UUID currentUserId() {
